@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="description" content="Contoso Enterprise ChatBot" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <title>Contoso Enterprise ChatBot</title>
+    <style>
+      :root {
+        --azc-primary: #07c;
+        --azc-bg: #eee;
+        --azc-border-radius: 16px;
+      }
+      html,
+      body {
+        font-size: 16px;
+        margin: 0;
+        background: var(--azc-bg);
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        height: 100%;
+      }
+      nav {
+        display: flex;
+        flex: 0 1 auto;
+        background: #333;
+        color: #fff;
+        padding: 16px;
+        font-family:
+          'Segoe UI',
+          -apple-system,
+          BlinkMacSystemFont,
+          Roboto,
+          'Helvetica Neue',
+          sans-serif;
+        font-size: 1.25rem;
+        align-items: center;
+        justify-content: space-between;
+      }
+      nav img {
+        height: 32px;
+        width: 32px;
+        margin-right: 8px;
+      }
+      nav .right {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      nav .user-name {
+        font-size: 1rem;
+        font-weight: bold;
+      }
+      .banner {
+        background-color: #ffcc00;
+        color: #333;
+        padding: 10px;
+        text-align: center;
+        font-size: 1rem;
+        display: none; /* Hidden by default */
+      }
+      .banner a {
+        color: #0078d4;
+        text-decoration: underline;
+        cursor: pointer;
+      }
+      main {
+        container-type: size;
+        flex: 1;
+        position: relative;
+        display: flex;
+      }
+      azc-chat {
+        flex: 1;
+        max-width: 3024px;
+        margin: 0 auto;
+      }
+      azc-history,
+      azc-chat {
+        pointer-events: none;
+        opacity: 0.5;
+      }
+      azc-history.enabled,
+      azc-chat.enabled {
+        pointer-events: auto;
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <div>
+        <img src="/favicon.png" alt="Logo" />
+        Contoso Enterprise ChatBot
+      </div>
+      <div class="right">
+        <span class="user-name" id="userName" style="display: none"></span>
+        <button id="signInButton">Sign In</button>
+        <button id="signOutButton" style="display: none">Sign Out</button>
+      </div>
+    </nav>
+    <div class="banner" id="loginBanner">
+      You must <a id="bannerSignInLink">sign in</a> to use the chat functionality.
+    </div>
+    <main>
+      <azc-history id="chatHistory"></azc-history>
+      <azc-chat id="chat"></azc-chat>
+    </main>
+    <script type="module">
+      import { signIn, signOut, getUserId } from '/src/index.js';
+
+      const signInButton = document.getElementById('signInButton');
+      const signOutButton = document.getElementById('signOutButton');
+      const userNameSpan = document.getElementById('userName');
+      const chatHistory = document.getElementById('chatHistory');
+      const chat = document.getElementById('chat');
+      const loginBanner = document.getElementById('loginBanner');
+      const bannerSignInLink = document.getElementById('bannerSignInLink');
+
+      // Disable chat components initially
+      chatHistory.classList.remove('enabled');
+      chat.classList.remove('enabled');
+
+      // Use getUserId to retrieve the user ID
+      const userId = getUserId();
+      const displayName = localStorage.getItem('displayName'); // Retrieve display name from localStorage
+      const userUpn = localStorage.getItem('userUpn'); // Retrieve UPN from localStora
+      if (userId) {
+        localStorage.setItem('userId', userId);
+        chatHistory.userId = userId;
+        chat.userId = userId;
+        chatHistory.classList.add('enabled');
+        chat.classList.add('enabled');
+        userNameSpan.textContent = `Welcome, ${displayName || 'User'}`; // Use stored display name or fallback to 'User'
+        userNameSpan.title = `UPN: ${userUpn || 'Not Available'}`; // Add UPN as a tooltip
+        userNameSpan.style.display = 'inline';
+        signInButton.style.display = 'none';
+        signOutButton.style.display = 'inline';
+        loginBanner.style.display = 'none'; // Hide the banner if the user is signed in
+      } else {
+        console.log('No user is signed in.');
+        loginBanner.style.display = 'block'; // Show the banner if the user is not signed in
+      }
+
+      // Event Listeners for chat components
+      chatHistory.addEventListener('loadSession', (e) => {
+        const { id, messages } = e.detail;
+        chat.sessionId = id;
+        chat.messages = messages;
+      });
+
+      chat.addEventListener('messagesUpdated', () => {
+        chatHistory.refresh();
+      });
+
+      // Event Listeners for Sign-In and Sign-Out
+      signInButton.addEventListener('click', async () => {
+        const user = await signIn();
+        if (user) {
+          const userId = getUserId();
+          const displayName = user.name || 'User'; // Use the user's display name if available
+          localStorage.setItem('displayName', displayName); // Store display name in localStorage
+
+          const userUpn = user.username || 'Not Available';
+          localStorage.setItem('userUpn', userUpn); // Store UPN in localStorage
+          signInButton.style.display = 'none';
+          signOutButton.style.display = 'inline';
+          chatHistory.userId = userId;
+          chat.userId = userId;
+          chatHistory.classList.add('enabled');
+          chat.classList.add('enabled');
+          userNameSpan.textContent = `Welcome, ${displayName}`;
+          userNameSpan.title = `UPN: ${userUpn}`; // Add UPN as a tooltip
+          userNameSpan.style.display = 'inline';
+          loginBanner.style.display = 'none'; // Hide the banner after signing in
+        }
+      });
+
+      signOutButton.addEventListener('click', async () => {
+        await signOut();
+        signInButton.style.display = 'inline';
+        signOutButton.style.display = 'none';
+        chatHistory.userId = null;
+        chat.userId = null;
+        chatHistory.classList.remove('enabled');
+        chat.classList.remove('enabled');
+        userNameSpan.style.display = 'none';
+        userNameSpan.textContent = '';
+        loginBanner.style.display = 'block'; // Show the banner after signing out
+        localStorage.removeItem('displayName'); // Clear display name from localStorage
+        localStorage.removeItem('userUpn'); // Clear UPN from localStorage
+      });
+
+      // Add click event to the banner sign-in link
+      bannerSignInLink.addEventListener('click', async () => {
+        signInButton.click();
+      });
+    </script>
+  </body>
+</html>
