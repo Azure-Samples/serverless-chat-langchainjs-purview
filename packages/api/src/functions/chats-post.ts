@@ -22,6 +22,7 @@ import {
   constructProcessContentRequestBody,
   enqueueOfflinePurviewTasksAsync,
   invokeProcessContentApi,
+  invokeLabelInfo,
   invokeProtectionScopeApi,
 } from '../purview-wrapper.js';
 
@@ -385,11 +386,45 @@ export async function postChats(request: HttpRequest, context: InvocationContext
         labelsToFilter.includes(doc.metadata?.label_metadata?.label_name)
         );
     } */
+    const acceptedAccessRights = new Set(['extract', 'owner', 'co-owner', 'co-author']);
+    const labelTasks = retrievedDocuments.map(async (document) => {
+      const documentLabelId: string | undefined = document.metadata?.label_metadata?.label_id;
+      const documentName: string | undefined = document.metadata?.source;
+      if (!documentLabelId) return null;
 
+      try {
+        const labelInfo = await invokeLabelInfo(accessToken, documentLabelId, context);
+
+        const value: string = String(labelInfo?.value ?? '').toLowerCase();
+
+        const isAllowed =
+          value.includes('owner') ||
+          value.includes('extract') ||
+          value.includes('co-owner') ||
+          value.includes('co-author');
+
+        if (isAllowed) {
+          context.log('File accepted', documentName, 'id', documentName, 'Rights', value);
+          return document;
+        }
+
+        context.log('File rejected', documentName, 'id', documentName, 'Rights', value);
+        return null;
+      } catch (error) {
+        context.error(`getLabelInfo failed for label ${documentLabelId}`, error);
+        return null;
+      }
+    });
+
+    /* 2️⃣ wait for all calls to finish and keep the accepted docs only */
+    // ...existing code...
+    // 2️⃣ wait for all calls to finish and keep the accepted docs only
+    const labelResults = await Promise.all(labelTasks); // ← await first
+    const filteredDocuments = labelResults.filter((d): d is (typeof retrievedDocuments)[number] => d !== null);
     const responseStream = await ragChainWithHistory.stream(
       {
         input: question,
-        context: retrievedDocuments,
+        context: filteredDocuments,
       },
       { configurable: { sessionId } },
     );

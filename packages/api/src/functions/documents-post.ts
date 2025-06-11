@@ -8,6 +8,7 @@ import { OllamaEmbeddings } from '@langchain/ollama';
 import { FaissStore } from '@langchain/community/vectorstores/faiss';
 import 'dotenv/config';
 import { BlobServiceClient } from '@azure/storage-blob';
+import { CosmosClient } from '@azure/cosmos';
 import { badRequest, serviceUnavailable, ok } from '../http-response.js';
 import { ollamaEmbeddingsModel, faissStoreFolder } from '../constants.js';
 import { getAzureOpenAiTokenProvider, getCredentials } from '../security.js';
@@ -16,18 +17,68 @@ export async function postDocuments(request: HttpRequest, context: InvocationCon
   const storageUrl = process.env.AZURE_STORAGE_URL;
   const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME;
   const azureOpenAiEndpoint = process.env.AZURE_OPENAI_API_ENDPOINT;
+  const cosmosEndpoint = process.env.AZURE_COSMOSDB_NOSQL_ENDPOINT;
+  const cosmosKey = process.env.AZURE_COSMOS_KEY;
+  const cosmosDatabaseName = 'vectorSearchDB';
+  const cosmosContainerName = 'vectorSearchContainer';
 
   try {
     // Get the uploaded file from the request
     const parsedForm = await request.formData();
 
+    // Enhanced validation for required fields
     if (!parsedForm.has('file')) {
-      return badRequest('"file" field not found in form data.');
+      return badRequest('Required field "file" is missing from form data.');
     }
+
+    // Validation for labelId and labelName
+    // if (!parsedForm.has('labelId')) {
+    //   return badRequest('Required field "labelId" is missing from form data.');
+    // }
+
+    // if (!parsedForm.has('labelName')) {
+    //   return badRequest('Required field "labelName" is missing from form data.');
+    // }
 
     // Type mismatch between Node.js FormData and Azure Functions FormData
     const file = parsedForm.get('file') as any as File;
     const filename = file.name;
+
+    // Get label information from form data
+    const labelId = parsedForm.get('labelId')?.toString() || '123456789';
+    const labelName = parsedForm.get('labelName')?.toString() || 'General';
+
+    // Check if document with same filename exists in database
+    let shouldUpdate = false;
+    if (azureOpenAiEndpoint && cosmosEndpoint) {
+      try {
+        context.log(`Checking if document "${filename}" already exists in database...`);
+        const credentials = getCredentials();
+        const cosmosClient = new CosmosClient({
+          endpoint: cosmosEndpoint,
+          aadCredentials: credentials, // Using Azure AD credentials instead of key
+        });
+
+        const database = cosmosClient.database(cosmosDatabaseName);
+        const container = database.container(cosmosContainerName);
+
+        // Query for documents with matching filename
+        const querySpec = {
+          query: 'SELECT * FROM c WHERE c.metadata.source = @filename',
+          parameters: [{ name: '@filename', value: filename }],
+        };
+
+        const { resources: existingDocuments } = await container.items.query(querySpec).fetchAll();
+
+        if (existingDocuments && existingDocuments.length > 0) {
+          shouldUpdate = true;
+          context.log(`Document "${filename}" already exists. Will update with new label information.`);
+        }
+      } catch (error) {
+        context.log(`Error checking for existing document: ${(error as Error).message}`);
+        // Continue with upload even if check fails
+      }
+    }
 
     // Extract text from the PDF
     const loader = new PDFLoader(file, {
@@ -35,6 +86,10 @@ export async function postDocuments(request: HttpRequest, context: InvocationCon
     });
     const rawDocument = await loader.load();
     rawDocument[0].metadata.source = filename;
+    rawDocument[0].metadata.label_metadata = {
+      label_id: labelId,
+      label_name: labelName,
+    };
 
     // Split the text into smaller chunks
     const splitter = new RecursiveCharacterTextSplitter({
@@ -43,14 +98,53 @@ export async function postDocuments(request: HttpRequest, context: InvocationCon
     });
     const documents = await splitter.splitDocuments(rawDocument);
 
-    // Generate embeddings and save in database
+    // Generate embeddings and save/update in database
     if (azureOpenAiEndpoint) {
       const credentials = getCredentials();
       const azureADTokenProvider = getAzureOpenAiTokenProvider();
 
+      // ADDED: Delete existing document chunks if updating
+      if (shouldUpdate && cosmosEndpoint) {
+        try {
+          context.log(`Updating document "${filename}" with new labels in Cosmos DB...`);
+          const cosmosClient = new CosmosClient({
+            endpoint: cosmosEndpoint,
+            aadCredentials: credentials,
+          });
+
+          const database = cosmosClient.database(cosmosDatabaseName);
+          const container = database.container(cosmosContainerName);
+
+          // Delete existing documents with the same filename
+          const querySpec = {
+            query: 'SELECT * FROM c WHERE c.metadata.source = @filename',
+            parameters: [{ name: '@filename', value: filename }],
+          };
+
+          const { resources: documentsToDelete } = await container.items.query(querySpec).fetchAll();
+
+          if (documentsToDelete && documentsToDelete.length > 0) {
+            for (const document of documentsToDelete) {
+              container.item(document.id, document.id).delete();
+            }
+
+            context.log(`Deleted ${documentsToDelete.length} existing documents.`);
+          }
+        } catch (error) {
+          context.log(`Error deleting existing documents: ${(error as Error).message}`);
+        }
+      }
+
       // Initialize embeddings model and vector database
       const embeddings = new AzureOpenAIEmbeddings({ azureADTokenProvider });
-      await AzureCosmosDBNoSQLVectorStore.fromDocuments(documents, embeddings, { credentials });
+
+      // Added explicit parameters for better configuration
+      await AzureCosmosDBNoSQLVectorStore.fromDocuments(documents, embeddings, {
+        credentials,
+        endpoint: cosmosEndpoint,
+        databaseName: cosmosDatabaseName,
+        containerName: cosmosContainerName,
+      });
     } else {
       // If no environment variables are set, it means we are running locally
       context.log('No Azure OpenAI endpoint set, using Ollama models and local DB');
