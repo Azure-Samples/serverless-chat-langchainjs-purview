@@ -22,7 +22,7 @@ import {
   constructProcessContentRequestBody,
   enqueueOfflinePurviewTasksAsync,
   invokeProcessContentApi,
-  invokeLabelInfo,
+  invokeUserRightsForLables,
   invokeProtectionScopeApi,
 } from '../purview-wrapper.js';
 
@@ -47,7 +47,10 @@ SOURCES:
 const titleSystemPrompt = `Create a title for this chat session, based on the user question. The title should be less than 32 characters. Do NOT use double-quotes.`;
 
 const sessionSequenceMap = new Map<string, number>(); // Map to track sequence numbers for each user
-const sessionProtectionDataMap = new Map<string, { etag: string; activityExecutionMap: Map<string, string> }>();
+const sessionProtectionDataMap = new Map<
+  string,
+  { etag: string; activityExecutionMap: Map<string, string>; allowedLabelIds: string[] }
+>();
 
 const msalConfig = {
   auth: {
@@ -207,6 +210,7 @@ export async function postChats(request: HttpRequest, context: InvocationContext
     let etagIdentifier = 'default';
     let uploadTextExecutionMode = 'default'; // Read executionMode from the environment variable
     let downloadTextExecutionMode = 'default'; // Read executionMode from the environment variable
+    let allowedLabelIdsSet: Set<string> = new Set<string>();
     // Get the Purview access token using via OBO flow
     const accessToken = await getPurviewAccessTokenViaOBO(request, context);
 
@@ -219,12 +223,14 @@ export async function postChats(request: HttpRequest, context: InvocationContext
       // Create separate variables for execution modes
       uploadTextExecutionMode = storedSessionData.activityExecutionMap.get('uploadText') || 'default';
       downloadTextExecutionMode = storedSessionData.activityExecutionMap.get('downloadText') || 'default';
+      allowedLabelIdsSet = new Set(storedSessionData.allowedLabelIds);
       context.log(
-        `Session exist : do not invoke protectionscopeapi: ${userId} ETag: ${etagIdentifier} Execution mode for uploadText: ${uploadTextExecutionMode} Execution mode for downloadText: ${downloadTextExecutionMode}`,
+        `Session exist : do not invoke protectionscopeapi: ${userId} ETag: ${etagIdentifier} Execution mode for uploadText: ${uploadTextExecutionMode} Execution mode for downloadText: ${downloadTextExecutionMode} LabelInfo: ${[...allowedLabelIdsSet].join(', ')}`,
       );
     } else {
       // Invoke Porection scope
       const { body: apiResponse, etag: returnedEtag } = await invokeProtectionScopeApi(accessToken);
+      context.log('ProtectionScope API Response:', JSON.stringify(apiResponse));
 
       etagIdentifier = returnedEtag || 'default'; // Update the etagIdentifier with the returned ETag from the API
       const {
@@ -233,17 +239,34 @@ export async function postChats(request: HttpRequest, context: InvocationContext
         downloadTextExecutionMode: newdownloadTextMode,
       } = processProtectionScopeApiResponse(apiResponse, sessionId, etagIdentifier, context);
 
-      context.log('ProtectionScope API Response:', JSON.stringify(apiResponse));
+      const userRightsForLabels = await invokeUserRightsForLables(accessToken, context);
+      const parsedUserRightsForLabels = JSON.parse(userRightsForLabels);
+      const allowedLabelIds: string[] = [];
+      for (const entry of parsedUserRightsForLabels?.value ?? []) {
+        const rightsValue = String(entry?.rights?.value ?? '').toLowerCase();
+        if (
+          rightsValue.includes('owner') ||
+          rightsValue.includes('extract') ||
+          rightsValue.includes('co-owner') ||
+          rightsValue.includes('co-author')
+        ) {
+          allowedLabelIds.push(String(entry.id));
+          context.log('User has access to label', String(entry.name), 'with ID', String(entry.id));
+        }
+      }
+
+      allowedLabelIdsSet = new Set(allowedLabelIds);
       // Store the session data
       sessionProtectionDataMap.set(userId, {
         etag: etagIdentifier,
         activityExecutionMap,
+        allowedLabelIds,
       });
       // Update the execution modes
       uploadTextExecutionMode = newuploadTextMode;
       downloadTextExecutionMode = newdownloadTextMode;
       context.log(
-        `No session available : Invoked protectionscopeapi : userid: ${userId} ETag: ${etagIdentifier} Execution mode for uploadText: ${uploadTextExecutionMode} Execution mode for downloadText: ${downloadTextExecutionMode}`,
+        `No session available : Invoked protectionscopeapi : userid: ${userId} ETag: ${etagIdentifier} Execution mode for uploadText: ${uploadTextExecutionMode} Execution mode for downloadText: ${downloadTextExecutionMode} allowedlablelist: ${[...allowedLabelIdsSet].join(', ')}`,
       );
     }
 
@@ -386,29 +409,18 @@ export async function postChats(request: HttpRequest, context: InvocationContext
         labelsToFilter.includes(doc.metadata?.label_metadata?.label_name)
         );
     } */
-    const acceptedAccessRights = new Set(['extract', 'owner', 'co-owner', 'co-author']);
     const labelTasks = retrievedDocuments.map(async (document) => {
       const documentLabelId: string | undefined = document.metadata?.label_metadata?.label_id;
       const documentName: string | undefined = document.metadata?.source;
       if (!documentLabelId) return null;
 
       try {
-        const labelInfo = await invokeLabelInfo(accessToken, documentLabelId, context);
-
-        const value: string = String(labelInfo?.value ?? '').toLowerCase();
-
-        const isAllowed =
-          value.includes('owner') ||
-          value.includes('extract') ||
-          value.includes('co-owner') ||
-          value.includes('co-author');
-
-        if (isAllowed) {
-          context.log('File accepted', documentName, 'id', documentName, 'Rights', value);
+        if (allowedLabelIdsSet.has(documentLabelId)) {
+          context.log('File accepted', documentName, 'id', documentLabelId);
           return document;
         }
 
-        context.log('File rejected', documentName, 'id', documentName, 'Rights', value);
+        context.log('File rejected', documentName, 'id', documentLabelId);
         return null;
       } catch (error) {
         context.error(`getLabelInfo failed for label ${documentLabelId}`, error);

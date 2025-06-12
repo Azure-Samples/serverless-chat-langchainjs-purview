@@ -43,12 +43,12 @@ export async function invokeProtectionScopeApi(accessToken: string): Promise<{ b
   }
 }
 
-export async function invokeLabelInfo(accessToken: string, labelId: string, context: InvocationContext): Promise<any> {
+export async function invokeUserRightsForLables(accessToken: string, context: InvocationContext): Promise<string> {
   try {
     // ── build endpoint ──────────────────────────────────────────────────────────
     const graphBaseUrl = process.env.GRAPH_BASE_URL?.replace(/\/+$/, '') || 'https://graph.microsoft.com/beta';
 
-    const url = `${graphBaseUrl}/security/dataSecurityAndGovernance/sensitivityLabels/${labelId}/rights`;
+    const url = `${graphBaseUrl}/security/dataSecurityAndGovernance/sensitivityLabels?$expand=rights`;
 
     context.log(`Calling Graph label endpoint: ${url}`);
 
@@ -67,9 +67,9 @@ export async function invokeLabelInfo(accessToken: string, labelId: string, cont
       throw new Error(`LabelInfo call failed - ${response.status}: ${errorText}`);
     }
 
-    const json = await response.json();
-    context.log('Graph label endpoint response:', JSON.stringify(json));
-    return json;
+    const body = await response.text();
+    context.log('Graph label endpoint response:', body);
+    return body; // Return the body as a string
   } catch (error) {
     context.error('Error retrieving label info:', error);
     throw error;
