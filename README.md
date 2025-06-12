@@ -141,24 +141,35 @@ The sections below explain the manual steps required to set up the Entra app reg
    1. Select **Register** to create the application.
 1. In the **Overview** blade, find and note the **Application (client) ID**. You use this value later while deploying this sample through `azd command`.
 1. In the app's registration screen, select the **Expose an API** blade to the left to open the page where you can publish the permission as an API for which client applications can obtain [access tokens](https://aka.ms/access-tokens) for. The first thing that we need to do is to declare the unique [resource](https://docs.microsoft.com/azure/active-directory/develop/v2-oauth2-auth-code-flow) URI that the clients will be using to obtain access tokens for this API. To declare an resource URI(Application ID URI), follow the following steps:
+
    1. Select **Set** next to the **Application ID URI** to generate a URI that is unique for this app.
    1. For this sample, accept the proposed Application ID URI (`api://{clientId}`) by selecting **Save**.
       > :information_source: Read more about Application ID URI at [Validation differences by supported account types (signInAudience)](https://docs.microsoft.com/azure/active-directory/develop/supported-accounts-validation).
 
-##### Publish Delegated Permissions
+1. ##### Publish Delegated Permissions
 
-1. All APIs must publish a minimum of one [scope](https://docs.microsoft.com/azure/active-directory/develop/v2-oauth2-auth-code-flow#request-an-authorization-code), also called [Delegated Permission](https://docs.microsoft.com/azure/active-directory/develop/v2-permissions-and-consent#permission-types), for the client apps to obtain an access token for a _user_ successfully. To publish a scope, follow these steps:
-1. Select **Add a scope** button open the **Add a scope** screen and Enter the values as indicated below:
-   1. For **Scope name**, use `access_as_user`.
-   1. Select **Admins and users** options for **Who can consent?**.
-   1. For **Admin consent display name** type in _access_as_user_.
-   1. For **Admin consent description** type in _e.g. Allows the app to get LLM response._.
-   1. For **User consent display name** type in _scopeName_.
-   1. For **User consent description** type in _eg. Allows the app to get LLM response._.
-   1. Keep **State** as **Enabled**.
-   1. Select the **Add scope** button on the bottom to save this scope.
+   1. All APIs must publish a minimum of one [scope](https://docs.microsoft.com/azure/active-directory/develop/v2-oauth2-auth-code-flow#request-an-authorization-code), also called [Delegated Permission](https://docs.microsoft.com/azure/active-directory/develop/v2-permissions-and-consent#permission-types), for the client apps to obtain an access token for a _user_ successfully. To publish a scope, follow these steps:
+   1. Select **Add a scope** button open the **Add a scope** screen and Enter the values as indicated below:
+      1. For **Scope name**, use `access_as_user`.
+      1. Select **Admins and users** options for **Who can consent?**.
+      1. For **Admin consent display name** type in _access_as_user_.
+      1. For **Admin consent description** type in _e.g. Allows the app to get LLM response._.
+      1. For **User consent display name** type in _scopeName_.
+      1. For **User consent description** type in _eg. Allows the app to get LLM response._.
+      1. Keep **State** as **Enabled**.
+      1. Select the **Add scope** button on the bottom to save this scope.
 
-> :information_source: Follow [the principle of least privilege when publishing permissions](https://learn.microsoft.com/security/zero-trust/develop/protected-api-example) for a web API.
+   > :information_source: Follow [the principle of least privilege when publishing permissions](https://learn.microsoft.com/security/zero-trust/develop/protected-api-example) for a web API.
+
+1. In the app's registration screen, select the **API permissions** blade in the left to open the page where we add access to the APIs that your application needs:
+
+   1. Select the **Add a permission** button and then select **Microsoft Graph**.
+   1. Choose below delegated permissions
+      1. Content.Process.User
+      1. ContentActivity.Write
+      1. ProtectionScopes.Compute.User
+      1. SensitivityLabel.Read
+   1. Grant admin consent for all the above permissions
 
 1. From the **Certificates & secrets** page, in the **Client secrets** section, choose **New client secret**:
 
@@ -167,19 +178,6 @@ The sections below explain the manual steps required to set up the Entra app reg
    - When you press the **Add** button, the key value will be displayed, copy, and save the value in a safe location.
    - You'll need this key later to during the package deployment through `azd up` command. . This key value will not be displayed again, nor retrievable by any other means,
      so record it as soon as it is visible from the Azure portal.
-
-##### Configure/grant the service app (backend-node-api) permissions to invoke the Purview API
-
-> In the steps below, "ClientID" is the same as "Application ID" or "AppId".
-
-1. Consuruct the below URL and replace the `<CLIENT_ID>` by the app registration id of the backend app
-
-```url
-https://login.microsoftonline.com/organizations/v2.0/adminconsent?client_id=%3CCLIENT_ID%3E&scope=Content.Process.User%20ProtectionScopes.Compute.User%20ContentActivity.Write%20SensitivityLabel.Read
-```
-
-1. Find the key `Enter_the_Application_Id_Here` and replace the existing value with the application ID (clientId) of `msal-node-api` app copied from the Microsoft Entra admin center.
-1. Find the key `Enter_the_Tenant_Info_Here` and replace the existing value with your Microsoft Entra tenant/directory ID.
 
 #### Register the client app (front-end-javascript-spa)
 
@@ -203,7 +201,7 @@ https://login.microsoftonline.com/organizations/v2.0/adminconsent?client_id=%3CC
    1. In the **Delegated permissions** section, select **access_as_user** in the list. Use the search box if necessary.
    1. Select the **Add permissions** button at the bottom.
 
-##### Configure the client app (front-end-javascript-spa) to use your app registration
+#### Configure the client app (front-end-javascript-spa) to use your app registration
 
 Open the project in your IDE (like VVisual Studio Code) to configure the code.
 
@@ -226,7 +224,7 @@ VITE_BACKEND_API_SCOPE="api://<API_ID>/access_as_user"
 3. Run `azd up` to deploy the application to Azure. This will provision Azure resources, deploy this sample, and build the search index based on the files found in the `./data` folder.
    - You will be prompted to select a base location for the resources. If you're unsure of which location to choose, select `eastus2`.
    - By default, the OpenAI resource will be deployed to `eastus2`. You can set a different location with `azd env set AZURE_OPENAI_RESOURCE_GROUP_LOCATION <location>`. Currently only a short list of locations is accepted. That location list is based on the [OpenAI model availability table](https://learn.microsoft.com/azure/ai-services/openai/concepts/models#standard-deployment-model-availability) and may become outdated as availability changes.
-   - You will be prompted to insert the app id of the backend app registration followed by the secret that yuu have created in the app registration step.
+   - You will be prompted to insert the app id of the backend app registration followed by the secret that yuo have created in the app registration step.
 
 The deployment process will take a few minutes. Once it's done, you'll see the URL of the web app in the terminal.
 
@@ -246,6 +244,61 @@ The deployment process will take a few minutes. Once it's done, you'll see the U
 > 5. Save the changes and retry accessing the application.
 
 You can now open the web app in your browser and start chatting with the bot.
+
+### How the Sample Works from a Purview API Integration Perspective
+
+There are three primary steps your app must take to process prompts and responses using **Microsoft Purview**:
+
+1. Compute protection scopes
+2. Compute rights for the labels assigned to the user
+3. Process content
+
+---
+
+#### 1. Compute Protection Scopes
+
+The first step is to compute the **protection scope state** for the user by calling the _Compute protection scopes_ API. This should be done shortly after the user authenticates.
+
+- **Docs:** [Compute protection scopes](https://learn.microsoft.com/en-us/purview/developer/use-the-api#compute-protection-scopes)
+- **Code:** `packages/api/src/purview-wrapper.ts` → `invokeProtectionScopeApi`
+- **Usage:** The API response is processed in `chat-post.ts`, where the policy details are cached for further use.
+
+---
+
+#### 2. Compute Rights for Labels
+
+The next step is to determine the **access rights** for the user by evaluating which sensitivity labels they are allowed to access.
+
+- **Docs:** [Usage rights (Graph API)](https://learn.microsoft.com/en-us/graph/api/usagerightsincluded-get?view=graph-rest-beta&tabs=http)
+- **Code:** `packages/api/src/purview-wrapper.ts` → `invokeUserRightsForLables`
+- **Usage:** The API response is processed and cached in `chat-post.ts` based on the authenticated user.
+
+> ℹ️ Label ID information is pre-populated during document uploads via `documents-post.ts`. for this to happen, you will have to run the project with `npm start` and then use below format to upload the each of the 3 files separetly
+
+```
+curl -X POST http://localhost:7071/api/documents \
+  -F "file=@data/privacy-policy.pdf" \
+  -F "labelId=<LABEL_ID>>" \
+  -F "labelName=<LABEL_NAME>"
+```
+
+> You can compute the label id information of the file through MIP SDK.
+
+---
+
+#### 3. Process Content
+
+Finally, the app calls the _Process content_ API using the cached protection scope state.
+
+- For each user activity, the app checks the user's protection scope and calls the API accordingly.
+- Include the cached `ETag` from the protection scopes call in the `If-None-Match` header.
+- The API response provides a decision (`allow`, `restrict`, etc.) for handling the interaction.
+
+- **Docs:** [Process content](https://learn.microsoft.com/en-us/purview/developer/use-the-api#process-content)
+- **Code:** `packages/api/src/purview-wrapper.ts` → `invokeProcessContentApi`
+- **Usage:** The API response is handled in `chat-post.ts`. If the decision is `restrict access`, the request is blocked from further processing.
+
+---
 
 ##### Enhance security
 
