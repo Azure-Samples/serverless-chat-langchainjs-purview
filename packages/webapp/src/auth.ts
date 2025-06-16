@@ -70,7 +70,7 @@ export async function acquireToken(): Promise<string | null> {
     if (error instanceof InteractionRequiredAuthError) {
       console.warn('Interaction required. Prompting user to log in.');
       const tokenResponse = await msalInstance.acquireTokenPopup({
-        scopes: ['api://72e39dca-38f3-4814-b93b-a7ed0a5a4b74/access_as_user'], // Add required scope
+        scopes: [import.meta.env.VITE_BACKEND_API_SCOPE], // Add required scope
       });
       return tokenResponse.accessToken;
     }
