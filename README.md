@@ -331,6 +331,9 @@ After that you have to install the NPM dependencies:
 npm install
 ```
 
+> Once your deployment is complete, you should see a `.env` file in the `packages/api` folder. This file contains the environment variables needed to run the application using Azure resources.
+> Remove the `AZURE_OPENAI_API_ENDPOINT` line from the `.env` file for the sample to use the local Ollama model
+
 Then you can start the application by running the following command which will start the web app and the API locally:
 
 ```bash
@@ -344,6 +347,22 @@ npm run upload:docs
 ```
 
 This only has to be done once, unless you want to add more documents.
+
+> This will create the `.faiss` folder under `packages/api` that is required by the model.
+
+Ensure your `local.settings.json` file includes the following configuration:
+
+```json
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node"
+  }
+}
+```
+
+If the `AzureWebJobsStorage` field is missing, please add it and restart the application. This setting is required for the Azure Functions runtime to operate correctly in the local development environment.
 
 You can now open the URL `http://localhost:8000` in your browser to start chatting with the bot.
 
@@ -367,7 +386,7 @@ Open the URL `http://localhost:8000` in your browser to start chatting with the 
 Note that the documents are uploaded automatically when deploying the sample to Azure with `azd up`.
 
 > [!TIP]
-> You can switch back to using Ollama models by simply deleting the `packages/api/.env` file and starting the application again. To regenerate the `.env` file, you can run `azd env get-values > packages/api/.env`.
+> You can switch back to using Ollama models by removing the `AZURE_OPENAI_API_ENDPOINT` line from the `packages/api/.env` file and restarting the application. To regenerate the `.env` file with Azure environment variables, run `azd env get-values > packages/api/.env`.
 
 ## Resources
 
