@@ -3,7 +3,7 @@
 
 <img src="./packages/webapp/public/favicon.png" alt="" align="center" height="64" />
 
-# Serverless AI Chat with RAG using LangChain.js
+# Serverless AI Chat with RAG using LangChain.js + Purview Data Security Integration
 
 [![Open project in GitHub Codespaces](https://img.shields.io/badge/Codespaces-Open-blue?style=flat-square&logo=github)](https://codespaces.new/Azure-Samples/serverless-chat-langchainjs?hide_repo_select=true&ref=main&quickstart=true)
 [![Join Azure AI Community Discord](https://img.shields.io/badge/Discord-Azure_AI_Community-blue?style=flat-square&logo=discord&color=5865f2&logoColor=fff)](https://discord.gg/kzRShWzttr)
