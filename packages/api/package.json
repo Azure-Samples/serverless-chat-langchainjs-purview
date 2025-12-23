@@ -29,7 +29,7 @@
     "@microsoft/ai-chat-protocol": "^1.0.0-beta.20240814.1",
     "dotenv": "^16.4.5",
     "faiss-node": "^0.5.1",
-    "langchain": "^0.3.6",
+    "langchain": "^0.3.37",
     "node-fetch": "^3.3.2",
     "pdf-parse": "^1.1.1",
     "uuid": "^11.0.3"
