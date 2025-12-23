@@ -22,7 +22,7 @@
     "@azure/storage-blob": "^12.17.0",
     "@langchain/azure-cosmosdb": "^0.2.2",
     "@langchain/community": "^0.3.15",
-    "@langchain/core": "^0.3.18",
+    "@langchain/core": "^0.3.80",
     "@langchain/ollama": "^0.2.0",
     "@langchain/openai": "^0.5.10",
     "@langchain/textsplitters": "^0.1.0",
