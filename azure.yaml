@@ -23,6 +23,7 @@ services:
     project: ./packages/api
     language: ts
     host: function
+    remoteBuild: true
 
 hooks:
   postprovision:
