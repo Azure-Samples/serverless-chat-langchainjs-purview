@@ -48,7 +48,7 @@
     "rimraf": "^6.0.1",
     "simple-git-hooks": "^2.9.0",
     "typescript": "^5.3.3",
-    "xo": "^0.60.0"
+    "xo": "^1.2.3"
   },
   "engines": {
     "node": ">=20",
@@ -113,6 +113,6 @@
     ]
   },
   "dependencies": {
-    "eslint": "^8.57.1"
+    "eslint": "^10.0.1"
   }
 }
